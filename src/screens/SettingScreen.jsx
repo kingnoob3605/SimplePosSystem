@@ -1,21 +1,27 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
 import { getSetting, setSetting, getAllCategories, saveCategory, deleteCategory } from '../db/db'
 import { t } from '../i18n'
 
-const CAT_EMOJIS = ['ðŸ±','ðŸ—','ðŸ¥¤','â˜•','ðŸµ','ðŸ§‹','ðŸ”','ðŸ•','ðŸŒ®','ðŸœ','ðŸ¥—','ðŸ°','ðŸ¦','ðŸ©','ðŸ§','ðŸ¥ž','ðŸ–','ðŸ¥ª','ðŸ²','ðŸ¥˜']
+const CAT_EMOJIS = ['🍱','🍗','🥤','☕','🍵','🧋','🍔','🍕','🌮','🍜','🥗','🍰','🍦','🍩','🧁','🥞','🍖','🥪','🍲','🥘']
 
 export default function SettingScreen() {
   const { lang, setLang, businessName, setBusinessName, gcashQR, setGcashQR, categories, setCategories } = useStore()
   const [nameInput, setNameInput] = useState(businessName)
   const [newCatName, setNewCatName] = useState('')
-  const [newCatEmoji, setNewCatEmoji] = useState('ðŸ±')
+  const [newCatEmoji, setNewCatEmoji] = useState('🍱')
   const [showCatEmoji, setShowCatEmoji] = useState(false)
+  const [toast, setToast] = useState(null)
 
   useEffect(() => {
     getSetting('gcashQR').then(qr => { if (qr) setGcashQR(qr) })
     getAllCategories().then(setCategories)
   }, [])
+
+  function showToast(msg) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 2000)
+  }
 
   function handleGCashUpload(e) {
     const file = e.target.files?.[0]
@@ -25,12 +31,16 @@ export default function SettingScreen() {
       const data = ev.target.result
       setGcashQR(data)
       await setSetting('gcashQR', data)
+      showToast(lang === 'fil' ? 'GCash QR na-save!' : 'GCash QR saved!')
     }
     reader.readAsDataURL(file)
   }
 
   function handleNameSave() {
-    setBusinessName(nameInput.trim())
+    const trimmed = nameInput.trim()
+    if (!trimmed) return
+    setBusinessName(trimmed)
+    showToast(lang === 'fil' ? 'Pangalan na-save!' : 'Name saved!')
   }
 
   async function handleAddCategory() {
@@ -39,18 +49,26 @@ export default function SettingScreen() {
     const updated = await getAllCategories()
     setCategories(updated)
     setNewCatName('')
-    setNewCatEmoji('ðŸ±')
+    setNewCatEmoji('🍱')
     setShowCatEmoji(false)
+    showToast(lang === 'fil' ? 'Category nadagdag!' : 'Category added!')
   }
 
   async function handleDeleteCategory(id) {
     await deleteCategory(id)
     const updated = await getAllCategories()
     setCategories(updated)
+    showToast(lang === 'fil' ? 'Category nabura!' : 'Category deleted!')
   }
 
   return (
     <div className="screen-enter">
+      {toast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-text text-surface text-sm font-semibold px-4 py-2.5 rounded-pill shadow-lg pointer-events-none">
+          {toast}
+        </div>
+      )}
+
       <header className="sticky top-0 bg-surface border-b border-border px-4 py-3 z-10">
         <p className="text-lg font-extrabold text-text">{t('setting', lang)}</p>
       </header>
@@ -63,6 +81,7 @@ export default function SettingScreen() {
             <input
               value={nameInput}
               onChange={e => setNameInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleNameSave()}
               placeholder={t('enterName', lang)}
               className="flex-1 h-12 rounded-lg border border-border px-3 text-sm font-semibold bg-surface focus:outline-none focus:border-amber"
             />
@@ -147,7 +166,7 @@ export default function SettingScreen() {
             </div>
           ) : (
             <label className="flex flex-col items-center justify-center h-28 rounded-card border-2 border-dashed border-border bg-surface-2 cursor-pointer gap-2">
-              <span className="text-3xl">ðŸ“·</span>
+              <span className="text-3xl">📷</span>
               <p className="text-sm font-semibold text-muted">{t('uploadQR', lang)}</p>
               <p className="text-xs text-faint">{t('uploadQRHint', lang)}</p>
               <input type="file" accept="image/*" className="hidden" onChange={handleGCashUpload} />
@@ -159,7 +178,7 @@ export default function SettingScreen() {
         <section>
           <p className="text-xs font-bold text-muted uppercase tracking-wide mb-2">{t('language', lang)}</p>
           <div className="flex gap-2">
-            {[['fil', 'Filipino ðŸ‡µðŸ‡­'], ['eng', 'English']].map(([code, label]) => (
+            {[['fil', 'Filipino 🇵🇭'], ['eng', 'English']].map(([code, label]) => (
               <button
                 key={code}
                 onClick={() => setLang(code)}
