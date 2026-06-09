@@ -1,18 +1,36 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop'
+import 'react-image-crop/dist/ReactCrop.css'
 import { useStore } from '../store/useStore'
 import { getAllItems, saveItem, deleteItem } from '../db/db'
 import { t } from '../i18n'
 
 const EMOJIS = ['🍱','🍗','🍖','🌮','🥪','🍜','🍝','🍛','🥘','🍲','🥗','🍔','🌭','🍕','🧆','🥚','🍳','🥞','🧇','🥓','🥩','🧀','🥫','🥦','🥕','🍎','🍊','🍋','🍇','🍓','🫐','🍉','🥭','🍑','🍒','🍌','🍍','🥝','🫙','🧃','🥤','☕','🍵','🧋','🧊','💧']
 
-const DEFAULT_ITEM = { name: '', price: '', emoji: '🍱', photo: null }
+const DEFAULT_ITEM = { name: '', price: '', emoji: '🍱', photo: null, categoryId: '', variants: [] }
+
+function getCroppedImg(imgEl, crop) {
+  const canvas = document.createElement('canvas')
+  const scaleX = imgEl.naturalWidth / imgEl.width
+  const scaleY = imgEl.naturalHeight / imgEl.height
+  canvas.width = crop.width
+  canvas.height = crop.height
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(imgEl, crop.x * scaleX, crop.y * scaleY, crop.width * scaleX, crop.height * scaleY, 0, 0, crop.width, crop.height)
+  return canvas.toDataURL('image/jpeg', 0.85)
+}
 
 export default function MenuScreen() {
-  const { items, setItems, lang } = useStore()
-  const [editing, setEditing] = useState(null) // null = list, object = form
+  const { items, setItems, categories, lang } = useStore()
+  const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(DEFAULT_ITEM)
   const [saving, setSaving] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
+  // Crop state
+  const [cropSrc, setCropSrc] = useState(null)
+  const [crop, setCrop] = useState()
+  const [completedCrop, setCompletedCrop] = useState(null)
+  const imgRef = useRef(null)
 
   async function reload() {
     const all = await getAllItems()
@@ -25,20 +43,43 @@ export default function MenuScreen() {
     setForm(DEFAULT_ITEM)
     setEditing('new')
     setShowEmoji(false)
+    setCropSrc(null)
   }
 
   function openEdit(item) {
-    setForm({ name: item.name, price: String(item.price), emoji: item.emoji || '🍱', photo: item.photo || null, id: item.id })
+    setForm({
+      name: item.name,
+      price: item.variants?.length ? '' : String(item.price ?? ''),
+      emoji: item.emoji || '🍱',
+      photo: item.photo || null,
+      categoryId: item.categoryId ? String(item.categoryId) : '',
+      variants: item.variants ? item.variants.map(v => ({ ...v })) : [],
+      id: item.id,
+    })
     setEditing(item.id)
     setShowEmoji(false)
+    setCropSrc(null)
   }
 
   async function handleSave() {
-    if (!form.name.trim() || !form.price) return
-    const price = parseFloat(form.price)
-    if (isNaN(price) || price < 0) return
+    if (!form.name.trim()) return
+    const hasVariants = form.variants.length > 0
+    if (!hasVariants && (!form.price || isNaN(parseFloat(form.price)))) return
     setSaving(true)
-    await saveItem({ id: editing !== 'new' ? editing : undefined, name: form.name.trim(), price, emoji: form.emoji, photo: form.photo || null })
+    const price = hasVariants ? null : parseFloat(form.price)
+    const variants = hasVariants
+      ? form.variants.filter(v => v.name.trim() && !isNaN(parseFloat(v.price)))
+          .map(v => ({ name: v.name.trim(), price: parseFloat(v.price) }))
+      : []
+    await saveItem({
+      id: editing !== 'new' ? editing : undefined,
+      name: form.name.trim(),
+      price,
+      emoji: form.emoji,
+      photo: form.photo || null,
+      categoryId: form.categoryId ? Number(form.categoryId) : null,
+      variants,
+    })
     await reload()
     setSaving(false)
     setEditing(null)
@@ -49,15 +90,79 @@ export default function MenuScreen() {
     await reload()
   }
 
-  function handlePhoto(e) {
+  function handlePhotoSelect(e) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = ev => setForm(f => ({ ...f, photo: ev.target.result }))
+    reader.onload = ev => {
+      setCropSrc(ev.target.result)
+      setCrop(undefined)
+      setCompletedCrop(null)
+    }
     reader.readAsDataURL(file)
   }
 
+  function onImageLoad(e) {
+    const { width, height } = e.currentTarget
+    const c = centerCrop(makeAspectCrop({ unit: '%', width: 90 }, 1, width, height), width, height)
+    setCrop(c)
+  }
+
+  function applyCrop() {
+    if (!completedCrop || !imgRef.current) return
+    const dataUrl = getCroppedImg(imgRef.current, completedCrop)
+    setForm(f => ({ ...f, photo: dataUrl, emoji: f.emoji }))
+    setCropSrc(null)
+  }
+
+  function addVariant() {
+    setForm(f => ({ ...f, variants: [...f.variants, { name: '', price: '' }] }))
+  }
+
+  function updateVariant(idx, field, value) {
+    setForm(f => {
+      const variants = f.variants.map((v, i) => i === idx ? { ...v, [field]: value } : v)
+      return { ...f, variants }
+    })
+  }
+
+  function removeVariant(idx) {
+    setForm(f => ({ ...f, variants: f.variants.filter((_, i) => i !== idx) }))
+  }
+
+  // Crop screen
+  if (cropSrc) {
+    return (
+      <div className="screen-enter">
+        <header className="sticky top-0 bg-surface border-b border-border px-4 py-3 z-10 flex items-center gap-3">
+          <button onClick={() => setCropSrc(null)} className="text-amber font-bold text-sm">← {t('cancel', lang)}</button>
+          <p className="text-lg font-extrabold text-text flex-1">{t('cropPhoto', lang)}</p>
+          <button onClick={applyCrop} className="text-amber font-bold text-sm">{t('applyCrop', lang)}</button>
+        </header>
+        <div className="flex flex-col items-center p-4 gap-4">
+          <p className="text-xs text-muted">{t('cropHint', lang)}</p>
+          <ReactCrop
+            crop={crop}
+            onChange={c => setCrop(c)}
+            onComplete={c => setCompletedCrop(c)}
+            aspect={1}
+            circularCrop={false}
+          >
+            <img ref={imgRef} src={cropSrc} alt="crop" onLoad={onImageLoad} className="max-w-full rounded-card" />
+          </ReactCrop>
+          <button
+            onClick={applyCrop}
+            className="w-full h-12 rounded-btn bg-amber text-white font-bold text-sm"
+          >
+            {t('applyCrop', lang)}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (editing !== null) {
+    const hasVariants = form.variants.length > 0
     return (
       <div className="screen-enter">
         <header className="sticky top-0 bg-surface border-b border-border px-4 py-3 z-10 flex items-center gap-3">
@@ -68,11 +173,11 @@ export default function MenuScreen() {
         </header>
 
         <div className="p-4 flex flex-col gap-4">
-          {/* Emoji / photo picker */}
+          {/* Photo / emoji */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowEmoji(v => !v)}
-              className="w-16 h-16 rounded-card border-2 border-border bg-surface-2 text-4xl flex items-center justify-center"
+              className="w-16 h-16 rounded-card border-2 border-border bg-surface-2 text-4xl flex items-center justify-center overflow-hidden"
             >
               {form.photo
                 ? <img src={form.photo} alt="item" className="w-full h-full object-cover rounded-card" />
@@ -82,17 +187,16 @@ export default function MenuScreen() {
               <p className="text-xs font-bold text-muted">Icon</p>
               <label className="text-xs font-semibold text-amber underline cursor-pointer">
                 {t('uploadPhoto', lang)}
-                <input type="file" accept="image/*" className="hidden" onChange={handlePhoto} />
+                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
               </label>
               {form.photo && (
-                <button onClick={() => setForm(f => ({ ...f, photo: null }))} className="text-xs text-error font-semibold">
+                <button onClick={() => setForm(f => ({ ...f, photo: null }))} className="text-xs text-error font-semibold text-left">
                   {t('removePhoto', lang)}
                 </button>
               )}
             </div>
           </div>
 
-          {/* Emoji grid */}
           {showEmoji && (
             <div className="grid grid-cols-8 gap-1 p-2 bg-surface-2 rounded-card border border-border">
               {EMOJIS.map(e => (
@@ -118,25 +222,78 @@ export default function MenuScreen() {
             />
           </div>
 
-          {/* Price */}
-          <div>
-            <label className="text-xs font-bold text-muted uppercase tracking-wide mb-1 block">{t('price', lang)}</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono font-medium text-muted">₱</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                value={form.price}
-                onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-                placeholder="0.00"
-                className="w-full h-12 rounded-lg border border-border pl-7 pr-3 font-mono text-sm font-medium bg-surface focus:outline-none focus:border-amber"
-              />
+          {/* Category */}
+          {categories.length > 0 && (
+            <div>
+              <label className="text-xs font-bold text-muted uppercase tracking-wide mb-1 block">{t('category', lang)}</label>
+              <select
+                value={form.categoryId}
+                onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}
+                className="w-full h-12 rounded-lg border border-border px-3 text-sm font-semibold bg-surface focus:outline-none focus:border-amber"
+              >
+                <option value="">{t('noCategory', lang)}</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.emoji ? `${cat.emoji} ` : ''}{cat.name}</option>
+                ))}
+              </select>
             </div>
+          )}
+
+          {/* Price or Variants */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-muted uppercase tracking-wide">{t('variants', lang)}</label>
+              <button onClick={addVariant} className="text-xs font-bold text-amber">+ {t('addVariant', lang)}</button>
+            </div>
+
+            {!hasVariants && (
+              <div>
+                <p className="text-xs text-faint mb-2">{t('noVariants', lang)}</p>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono font-medium text-muted">₱</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={form.price}
+                    onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                    placeholder="0.00"
+                    className="w-full h-12 rounded-lg border border-border pl-7 pr-3 font-mono text-sm font-medium bg-surface focus:outline-none focus:border-amber"
+                  />
+                </div>
+              </div>
+            )}
+
+            {hasVariants && (
+              <div className="flex flex-col gap-2">
+                {form.variants.map((v, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      value={v.name}
+                      onChange={e => updateVariant(idx, 'name', e.target.value)}
+                      placeholder={t('variantName', lang)}
+                      className="flex-1 h-11 rounded-lg border border-border px-3 text-sm font-semibold bg-surface focus:outline-none focus:border-amber"
+                    />
+                    <div className="relative w-28">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-muted text-sm">₱</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={v.price}
+                        onChange={e => updateVariant(idx, 'price', e.target.value)}
+                        placeholder="0"
+                        className="w-full h-11 rounded-lg border border-border pl-6 pr-2 font-mono text-sm bg-surface focus:outline-none focus:border-amber"
+                      />
+                    </div>
+                    <button onClick={() => removeVariant(idx)} className="text-error font-bold text-lg leading-none w-8 flex-shrink-0">×</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <button
             onClick={handleSave}
-            disabled={saving || !form.name.trim() || !form.price}
+            disabled={saving || !form.name.trim() || (!hasVariants && !form.price)}
             className="h-12 rounded-btn bg-amber text-white font-bold text-sm disabled:opacity-50 mt-2"
           >
             {saving ? '...' : t('save', lang)}
@@ -159,10 +316,7 @@ export default function MenuScreen() {
     <div className="screen-enter">
       <header className="sticky top-0 bg-surface border-b border-border px-4 py-3 z-10 flex items-center justify-between">
         <p className="text-lg font-extrabold text-text">{t('menu', lang)}</p>
-        <button
-          onClick={openNew}
-          className="h-9 px-4 rounded-pill bg-amber text-white text-xs font-bold"
-        >
+        <button onClick={openNew} className="h-9 px-4 rounded-pill bg-amber text-white text-xs font-bold">
           + {t('addItem', lang)}
         </button>
       </header>
@@ -187,7 +341,13 @@ export default function MenuScreen() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-text truncate">{item.name}</p>
-                <p className="font-mono text-sm text-amber-dark">₱{item.price.toFixed(2)}</p>
+                {item.variants?.length > 0
+                  ? <p className="text-xs text-muted">{item.variants.length} variants · ₱{Math.min(...item.variants.map(v => v.price)).toFixed(2)}+</p>
+                  : <p className="font-mono text-sm text-amber-dark">₱{(item.price ?? 0).toFixed(2)}</p>
+                }
+                {item.categoryId && categories.find(c => c.id === item.categoryId) && (
+                  <p className="text-[10px] text-faint">{categories.find(c => c.id === item.categoryId)?.name}</p>
+                )}
               </div>
               <span className="text-faint text-sm">›</span>
             </div>

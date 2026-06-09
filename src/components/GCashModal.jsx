@@ -12,7 +12,7 @@ export default function GCashModal() {
       total,
       itemCount: lines.reduce((s, l) => s + l.qty, 0),
       method: 'gcash',
-      lines: lines.map(l => ({ name: l.name, qty: l.qty, subtotal: l.subtotal })),
+      lines: lines.map(l => ({ name: l.displayName, qty: l.qty, subtotal: l.subtotal })),
     })
     clearCart()
     setGcashOpen(false)
@@ -20,13 +20,11 @@ export default function GCashModal() {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-between py-8 px-4">
-      {/* Amount */}
       <div className="text-center">
         <p className="text-white/60 text-sm font-semibold mb-1">{t('totalAmount', lang)}</p>
         <p className="font-mono text-4xl font-medium text-amber">₱{total.toFixed(2)}</p>
       </div>
 
-      {/* QR code */}
       <div className="flex-1 flex items-center justify-center w-full px-4">
         {gcashQR ? (
           <div className="bg-white rounded-2xl p-3 w-full max-w-xs">
@@ -41,23 +39,15 @@ export default function GCashModal() {
         )}
       </div>
 
-      {/* Instruction */}
       <div className="text-center mb-4">
         <p className="text-white/70 text-sm font-semibold">{t('scanQR', lang)}</p>
       </div>
 
-      {/* Confirm + cancel */}
       <div className="w-full flex flex-col gap-2 max-w-sm">
-        <button
-          onClick={handlePaid}
-          className="w-full h-14 rounded-btn bg-green text-white font-bold text-base"
-        >
+        <button onClick={handlePaid} className="w-full h-14 rounded-btn bg-green text-white font-bold text-base">
           {t('confirmPayment', lang)}
         </button>
-        <button
-          onClick={() => setGcashOpen(false)}
-          className="w-full h-10 rounded-btn text-white/50 font-semibold text-sm"
-        >
+        <button onClick={() => setGcashOpen(false)} className="w-full h-10 rounded-btn text-white/50 font-semibold text-sm">
           {t('cancel', lang)}
         </button>
       </div>

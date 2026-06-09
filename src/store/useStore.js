@@ -5,38 +5,43 @@ export const useStore = create((set, get) => ({
   screen: 'benta',
   setScreen: (screen) => set({ screen }),
 
-  // Item catalog (loaded from IndexedDB)
+  // Item catalog
   items: [],
   setItems: (items) => set({ items }),
 
-  // Cart: { [itemId]: quantity }
+  // Categories
+  categories: [],
+  setCategories: (categories) => set({ categories }),
+
+  // Cart: { [cartKey]: qty }
+  // cartKey = itemId (no variants) or "itemId_variantIdx" (with variants)
   cart: {},
-  addToCart: (itemId) => {
+  addToCart: (cartKey) => {
     const cart = { ...get().cart }
-    cart[itemId] = (cart[itemId] || 0) + 1
+    cart[cartKey] = (cart[cartKey] || 0) + 1
     set({ cart })
   },
-  removeFromCart: (itemId) => {
+  removeFromCart: (cartKey) => {
     const cart = { ...get().cart }
-    if (!cart[itemId]) return
-    if (cart[itemId] <= 1) {
-      delete cart[itemId]
+    if (!cart[cartKey]) return
+    if (cart[cartKey] <= 1) {
+      delete cart[cartKey]
     } else {
-      cart[itemId] -= 1
+      cart[cartKey] -= 1
     }
     set({ cart })
   },
   clearCart: () => set({ cart: {} }),
 
-  // Checkout modal
+  // Modals
   checkoutOpen: false,
   setCheckoutOpen: (v) => set({ checkoutOpen: v }),
-
-  // GCash modal
   gcashOpen: false,
   setGcashOpen: (v) => set({ gcashOpen: v }),
+  variantPickerItem: null,
+  setVariantPickerItem: (item) => set({ variantPickerItem: item }),
 
-  // GCash QR image (base64, loaded from IndexedDB)
+  // GCash QR
   gcashQR: null,
   setGcashQR: (v) => set({ gcashQR: v }),
 
@@ -46,7 +51,6 @@ export const useStore = create((set, get) => ({
     localStorage.setItem('lang', lang)
     set({ lang })
   },
-
   businessName: localStorage.getItem('businessName') || '',
   setBusinessName: (name) => {
     localStorage.setItem('businessName', name)
@@ -54,21 +58,58 @@ export const useStore = create((set, get) => ({
   },
 }))
 
-// Derived: cart total (pesos)
+// Parse cart key into itemId + optional variantIdx
+export function parseCartKey(key) {
+  const str = String(key)
+  const parts = str.split('_')
+  return {
+    itemId: Number(parts[0]),
+    variantIdx: parts.length > 1 ? Number(parts[1]) : null,
+  }
+}
+
+// Get price for a cart key
+function resolvePrice(item, variantIdx) {
+  if (variantIdx !== null && item.variants?.length) {
+    return item.variants[variantIdx]?.price ?? 0
+  }
+  return item.price ?? 0
+}
+
+// Total qty for an item across all its variants
+export function itemTotalQty(cart, itemId) {
+  return Object.entries(cart)
+    .filter(([key]) => parseCartKey(key).itemId === itemId)
+    .reduce((sum, [, qty]) => sum + qty, 0)
+}
+
 export function cartTotal(items, cart) {
-  return Object.entries(cart).reduce((sum, [id, qty]) => {
-    const item = items.find(i => i.id === Number(id))
-    return sum + (item ? item.price * qty : 0)
+  return Object.entries(cart).reduce((sum, [key, qty]) => {
+    const { itemId, variantIdx } = parseCartKey(key)
+    const item = items.find(i => i.id === itemId)
+    if (!item) return sum
+    return sum + resolvePrice(item, variantIdx) * qty
   }, 0)
 }
 
-// Derived: cart line items for display
 export function cartLines(items, cart) {
   return Object.entries(cart)
     .filter(([, qty]) => qty > 0)
-    .map(([id, qty]) => {
-      const item = items.find(i => i.id === Number(id))
-      return item ? { ...item, qty, subtotal: item.price * qty } : null
+    .map(([key, qty]) => {
+      const { itemId, variantIdx } = parseCartKey(key)
+      const item = items.find(i => i.id === itemId)
+      if (!item) return null
+      const price = resolvePrice(item, variantIdx)
+      const variantName = variantIdx !== null ? item.variants?.[variantIdx]?.name ?? null : null
+      return {
+        ...item,
+        cartKey: key,
+        qty,
+        price,
+        subtotal: price * qty,
+        variantName,
+        displayName: variantName ? `${item.name} (${variantName})` : item.name,
+      }
     })
     .filter(Boolean)
 }

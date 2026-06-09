@@ -1,11 +1,11 @@
 import { useEffect } from 'react'
 import { useStore } from './store/useStore'
-import { getAllItems } from './db/db'
-import { getSetting } from './db/db'
+import { getAllItems, getAllCategories, getSetting } from './db/db'
 import BottomNav from './components/BottomNav'
 import StickyBar from './components/StickyBar'
 import CheckoutModal from './components/CheckoutModal'
 import GCashModal from './components/GCashModal'
+import VariantPickerModal from './components/VariantPickerModal'
 import BentaScreen from './screens/BentaScreen'
 import MenuScreen from './screens/MenuScreen'
 import UlatScreen from './screens/UlatScreen'
@@ -19,10 +19,11 @@ const SCREENS = {
 }
 
 export default function App() {
-  const { screen, setItems, setGcashQR, checkoutOpen, gcashOpen } = useStore()
+  const { screen, setItems, setCategories, setGcashQR, checkoutOpen, gcashOpen, variantPickerItem } = useStore()
 
   useEffect(() => {
     getAllItems().then(setItems)
+    getAllCategories().then(setCategories)
     getSetting('gcashQR').then(qr => { if (qr) setGcashQR(qr) })
   }, [])
 
@@ -30,16 +31,14 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-full bg-bg">
-      {/* Main scrollable area */}
       <main className="flex-1 overflow-y-auto pb-[136px]">
         <Screen />
       </main>
 
-      {/* Always-visible UI */}
       {screen === 'benta' && <StickyBar />}
       <BottomNav />
 
-      {/* Modals */}
+      {variantPickerItem && <VariantPickerModal />}
       {checkoutOpen && <CheckoutModal />}
       {gcashOpen && <GCashModal />}
     </div>

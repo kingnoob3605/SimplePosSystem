@@ -1,14 +1,20 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useStore } from '../store/useStore'
-import { getSetting, setSetting } from '../db/db'
+import { getSetting, setSetting, getAllCategories, saveCategory, deleteCategory } from '../db/db'
 import { t } from '../i18n'
 
+const CAT_EMOJIS = ['ðŸ±','ðŸ—','ðŸ¥¤','â˜•','ðŸµ','ðŸ§‹','ðŸ”','ðŸ•','ðŸŒ®','ðŸœ','ðŸ¥—','ðŸ°','ðŸ¦','ðŸ©','ðŸ§','ðŸ¥ž','ðŸ–','ðŸ¥ª','ðŸ²','ðŸ¥˜']
+
 export default function SettingScreen() {
-  const { lang, setLang, businessName, setBusinessName, gcashQR, setGcashQR } = useStore()
+  const { lang, setLang, businessName, setBusinessName, gcashQR, setGcashQR, categories, setCategories } = useStore()
   const [nameInput, setNameInput] = useState(businessName)
+  const [newCatName, setNewCatName] = useState('')
+  const [newCatEmoji, setNewCatEmoji] = useState('ðŸ±')
+  const [showCatEmoji, setShowCatEmoji] = useState(false)
 
   useEffect(() => {
     getSetting('gcashQR').then(qr => { if (qr) setGcashQR(qr) })
+    getAllCategories().then(setCategories)
   }, [])
 
   function handleGCashUpload(e) {
@@ -25,6 +31,22 @@ export default function SettingScreen() {
 
   function handleNameSave() {
     setBusinessName(nameInput.trim())
+  }
+
+  async function handleAddCategory() {
+    if (!newCatName.trim()) return
+    await saveCategory({ name: newCatName.trim(), emoji: newCatEmoji })
+    const updated = await getAllCategories()
+    setCategories(updated)
+    setNewCatName('')
+    setNewCatEmoji('ðŸ±')
+    setShowCatEmoji(false)
+  }
+
+  async function handleDeleteCategory(id) {
+    await deleteCategory(id)
+    const updated = await getAllCategories()
+    setCategories(updated)
   }
 
   return (
@@ -44,13 +66,70 @@ export default function SettingScreen() {
               placeholder={t('enterName', lang)}
               className="flex-1 h-12 rounded-lg border border-border px-3 text-sm font-semibold bg-surface focus:outline-none focus:border-amber"
             />
-            <button
-              onClick={handleNameSave}
-              className="h-12 px-4 rounded-btn bg-amber text-white font-bold text-sm"
-            >
+            <button onClick={handleNameSave} className="h-12 px-4 rounded-btn bg-amber text-white font-bold text-sm">
               {t('save', lang)}
             </button>
           </div>
+        </section>
+
+        {/* Categories */}
+        <section>
+          <p className="text-xs font-bold text-muted uppercase tracking-wide mb-2">{t('categories', lang)}</p>
+
+          {categories.length > 0 && (
+            <div className="flex flex-col gap-1 mb-3">
+              {categories.map(cat => (
+                <div key={cat.id} className="flex items-center justify-between px-3 py-2.5 bg-surface border border-border rounded-card">
+                  <span className="text-sm font-semibold text-text">
+                    {cat.emoji && <span className="mr-1">{cat.emoji}</span>}{cat.name}
+                  </span>
+                  <button
+                    onClick={() => handleDeleteCategory(cat.id)}
+                    className="text-error text-xs font-bold px-2 py-1"
+                  >
+                    {t('delete', lang)}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={() => setShowCatEmoji(v => !v)}
+              className="w-12 h-12 rounded-lg border border-border bg-surface-2 text-2xl flex items-center justify-center flex-shrink-0"
+            >
+              {newCatEmoji}
+            </button>
+            <input
+              value={newCatName}
+              onChange={e => setNewCatName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAddCategory()}
+              placeholder={t('categoryName', lang)}
+              className="flex-1 h-12 rounded-lg border border-border px-3 text-sm font-semibold bg-surface focus:outline-none focus:border-amber"
+            />
+            <button
+              onClick={handleAddCategory}
+              disabled={!newCatName.trim()}
+              className="h-12 px-3 rounded-btn bg-amber text-white font-bold text-sm disabled:opacity-40"
+            >
+              +
+            </button>
+          </div>
+
+          {showCatEmoji && (
+            <div className="grid grid-cols-10 gap-1 p-2 mt-2 bg-surface-2 rounded-card border border-border">
+              {CAT_EMOJIS.map(e => (
+                <button
+                  key={e}
+                  onClick={() => { setNewCatEmoji(e); setShowCatEmoji(false) }}
+                  className={`text-xl h-9 rounded flex items-center justify-center ${newCatEmoji === e ? 'bg-amber-light' : ''}`}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* GCash QR */}
@@ -68,7 +147,7 @@ export default function SettingScreen() {
             </div>
           ) : (
             <label className="flex flex-col items-center justify-center h-28 rounded-card border-2 border-dashed border-border bg-surface-2 cursor-pointer gap-2">
-              <span className="text-3xl">📷</span>
+              <span className="text-3xl">ðŸ“·</span>
               <p className="text-sm font-semibold text-muted">{t('uploadQR', lang)}</p>
               <p className="text-xs text-faint">{t('uploadQRHint', lang)}</p>
               <input type="file" accept="image/*" className="hidden" onChange={handleGCashUpload} />
@@ -80,7 +159,7 @@ export default function SettingScreen() {
         <section>
           <p className="text-xs font-bold text-muted uppercase tracking-wide mb-2">{t('language', lang)}</p>
           <div className="flex gap-2">
-            {[['fil', 'Filipino 🇵🇭'], ['eng', 'English']].map(([code, label]) => (
+            {[['fil', 'Filipino ðŸ‡µðŸ‡­'], ['eng', 'English']].map(([code, label]) => (
               <button
                 key={code}
                 onClick={() => setLang(code)}

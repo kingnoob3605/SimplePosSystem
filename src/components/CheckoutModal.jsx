@@ -24,7 +24,7 @@ export default function CheckoutModal() {
       total,
       itemCount: lines.reduce((s, l) => s + l.qty, 0),
       method: 'cash',
-      lines: lines.map(l => ({ name: l.name, qty: l.qty, subtotal: l.subtotal })),
+      lines: lines.map(l => ({ name: l.displayName, qty: l.qty, subtotal: l.subtotal })),
     })
     clearCart()
     setCashGiven('')
@@ -34,22 +34,22 @@ export default function CheckoutModal() {
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/50">
       <div className="mt-auto bg-bg rounded-t-[20px] overflow-hidden max-h-[90vh] flex flex-col">
-        {/* Header */}
         <div className="bg-surface px-4 py-4 border-b border-border flex items-center justify-between">
           <p className="text-lg font-extrabold text-text">{t('checkout', lang)}</p>
           <button onClick={() => setCheckoutOpen(false)} className="text-muted text-2xl leading-none">×</button>
         </div>
 
-        {/* Scrollable body */}
         <div className="overflow-y-auto flex-1 px-4 py-3 flex flex-col gap-3">
-          {/* Cart summary */}
+          {/* Cart lines */}
           <div className="bg-surface rounded-card border border-border overflow-hidden">
             {lines.map(line => (
-              <div key={line.id} className="flex items-center justify-between px-3 py-2.5 border-b border-border last:border-0">
+              <div key={line.cartKey} className="flex items-center justify-between px-3 py-2.5 border-b border-border last:border-0">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-lg">{line.emoji || '🍱'}</span>
+                  <span className="text-lg">{line.photo
+                    ? <img src={line.photo} alt={line.name} className="w-6 h-6 rounded object-cover" />
+                    : line.emoji || '🍱'}</span>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-text truncate">{line.name}</p>
+                    <p className="text-sm font-semibold text-text truncate">{line.displayName}</p>
                     <p className="text-[11px] text-muted">× {line.qty}</p>
                   </div>
                 </div>
@@ -105,7 +105,6 @@ export default function CheckoutModal() {
                   <p className="font-mono text-xl font-medium text-green">₱{change.toFixed(2)}</p>
                 </div>
               )}
-              {/* Quick cash buttons */}
               <div className="grid grid-cols-4 gap-1.5">
                 {[20, 50, 100, 200, 500, 1000].filter(v => v >= total * 0.8).slice(0, 4).map(v => (
                   <button
@@ -121,7 +120,6 @@ export default function CheckoutModal() {
           )}
         </div>
 
-        {/* Confirm button */}
         <div className="px-4 pt-2 pb-4 bg-bg border-t border-border">
           <button
             onClick={handleConfirm}

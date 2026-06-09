@@ -29,7 +29,6 @@ export default function UlatScreen() {
         </p>
       </header>
 
-      {/* Summary card */}
       <div className="p-4">
         <div className="bg-amber-light border border-amber rounded-card p-4 flex items-center justify-between">
           <div>
@@ -43,7 +42,6 @@ export default function UlatScreen() {
         </div>
       </div>
 
-      {/* Transaction list */}
       <div className="px-4 flex flex-col gap-2 pb-4">
         {sales.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
@@ -55,13 +53,11 @@ export default function UlatScreen() {
             const isOpen = expanded === sale.id
             return (
               <div key={sale.id} className="bg-surface border border-border rounded-card overflow-hidden">
-                {/* Row — always visible */}
                 <button
                   onClick={() => toggle(sale.id)}
                   className="w-full flex items-center justify-between px-3 py-3 text-left"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    {/* Ref number */}
                     <span className="text-[10px] font-mono font-bold text-faint bg-surface-2 border border-border rounded px-1.5 py-0.5 flex-shrink-0">
                       {sale.ref || '—'}
                     </span>
@@ -82,13 +78,12 @@ export default function UlatScreen() {
                   </div>
                 </button>
 
-                {/* Expandable line items */}
                 {isOpen && (
                   <div className="border-t border-border bg-surface-2 px-3 py-2 flex flex-col gap-1">
                     <p className="text-[10px] font-bold text-muted uppercase tracking-wide mb-1">
                       {t('orderDetails', lang)}
                     </p>
-                    {sale.lines && sale.lines.length > 0 ? (
+                    {sale.lines?.length > 0 ? (
                       sale.lines.map((line, i) => (
                         <div key={i} className="flex items-center justify-between py-1 border-b border-border last:border-0">
                           <div className="flex items-center gap-2">

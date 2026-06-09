@@ -1,26 +1,27 @@
 import { openDB } from 'idb'
 
 const DB_NAME = 'tindapos'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 export async function getDB() {
   return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains('items')) {
+    upgrade(db, oldVersion) {
+      if (oldVersion < 1) {
         const itemStore = db.createObjectStore('items', { keyPath: 'id', autoIncrement: true })
         itemStore.createIndex('name', 'name')
-      }
-      if (!db.objectStoreNames.contains('sales')) {
         const saleStore = db.createObjectStore('sales', { keyPath: 'id', autoIncrement: true })
         saleStore.createIndex('date', 'date')
-      }
-      if (!db.objectStoreNames.contains('settings')) {
         db.createObjectStore('settings')
+      }
+      if (oldVersion < 2) {
+        const catStore = db.createObjectStore('categories', { keyPath: 'id', autoIncrement: true })
+        catStore.createIndex('name', 'name')
       }
     },
   })
 }
 
+// Items
 export async function getAllItems() {
   const db = await getDB()
   return db.getAll('items')
@@ -38,6 +39,25 @@ export async function deleteItem(id) {
   return db.delete('items', id)
 }
 
+// Categories
+export async function getAllCategories() {
+  const db = await getDB()
+  return db.getAll('categories')
+}
+
+export async function saveCategory(category) {
+  const db = await getDB()
+  if (category.id) return db.put('categories', category)
+  const { id: _id, ...rest } = category
+  return db.add('categories', rest)
+}
+
+export async function deleteCategory(id) {
+  const db = await getDB()
+  return db.delete('categories', id)
+}
+
+// Sales
 export function generateRef() {
   const now = new Date()
   const pad = n => String(n).padStart(2, '0')
@@ -56,6 +76,7 @@ export async function getTodaySales() {
   return all.filter(s => new Date(s.date).toDateString() === today)
 }
 
+// Settings
 export async function getSetting(key) {
   const db = await getDB()
   return db.get('settings', key)
